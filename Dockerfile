@@ -21,14 +21,14 @@ RUN apt-get update && \
         openjdk-7-jdk \
         pngcrush schedtool xsltproc zip zlib1g-dev
 
-ADD https://commondatastorage.googleapis.com/git-repo-downloads/repo /usr/local/bin/
+COPY repo /usr/local/bin/
 RUN chmod 755 /usr/local/bin/*
 
 RUN apt-get update && apt-get install -y software-properties-common python-software-properties
 
 # We need this because of this https://blog.phusion.nl/2015/01/20/docker-and-the-pid-1-zombie-reaping-problem/
 # Here is solution https://engineeringblog.yelp.com/2016/01/dumb-init-an-init-for-docker.html
-RUN curl --create-dirs -sSLo /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.1.3/dumb-init_1.1.3_amd64
+COPY dumb-init /usr/local/bin/
 RUN chmod +x /usr/local/bin/dumb-init
 
 # Extras that android-x86.org and android-ia need
@@ -46,4 +46,17 @@ RUN chmod 755 /script/build.sh
 
 WORKDIR /android-repo
 
-CMD ["/usr/local/bin/dumb-init", "--", "/script/build.sh"]
+# add sshd
+RUN apt-get update && apt-get install -y openssh-server
+RUN mkdir /var/run/sshd
+RUN echo 'root:screencast' | chpasswd
+RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+
+# SSH login fix. Otherwise user is kicked off after login
+RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+
+ENV NOTVISIBLE "in users profile"
+RUN echo "export VISIBLE=now" >> /etc/profile
+
+EXPOSE 22
+CMD ["/usr/local/bin/dumb-init", "--", "/usr/sbin/sshd", "-D"]
